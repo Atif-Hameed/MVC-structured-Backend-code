@@ -1,6 +1,5 @@
 import { userModel } from "../models/users.js"
 
-
 export const userController = async (req, resp) => {
     try {
         const { name, email, password, adress, city, country, phone } = req.body
@@ -46,51 +45,169 @@ export const userController = async (req, resp) => {
 }
 
 
-//Login
+//Login Controller
 
 export const loginController = async (req, resp) => {
     try {
-        const {email, password} = req.body;
+        const { email, password } = req.body;
 
         //validation
-        if(!email || !password){
+        if (!email || !password) {
             return resp.status(500).send({
-                success:false,
-                message:'Please enter both Email and Password'
+                success: false,
+                message: 'Please enter both Email and Password'
             })
         }
         //exatract user
-        const user = await userModel.findOne({email})
+        const user = await userModel.findOne({ email })
 
         //verify email
-        if(!user){
+        if (!user) {
             return resp.status(404).send({
-                success:false,
-                message:'User Not Found'
+                success: false,
+                message: 'User Not Found'
             })
         }
 
         //compare password with encrypted
-            const validPass = await user.comparePassword(password)
+        const validPass = await user.comparePassword(password)
 
-            //verfiy Password
-            if(!validPass){
-                return resp.status(401).send({
-                    success:false,
-                    message:'Invalid Cridentals'
-                })
-            }
+        //verfiy Password
+        if (!validPass) {
+            return resp.status(401).send({
+                success: false,
+                message: 'Invalid Cridentals'
+            })
+        }
 
-        resp.status(200).send({
-            success:true,
-            message:'Login Successfully',
-            user,
+        //token genererated
+        const token = user.tokenGenerate()
+
+        resp.status(200).cookie('token', token, {
+            expires : new Date(Date.now() + 7 * 24 * 60 * 60 ),
+            httpOnly : process.env.NODE_ENV === 'development' ? true : false,
+            secure : process.env.NODE_ENV === 'development' ? true : false,
+        }).send({
+            success: true,
+            message: 'Login Successfully',
+            token,
+            user
         })
 
     } catch (error) {
         resp.status(500).send({
-            success:false,
-            message:'Login API Error',
+            success: false,
+            message: 'Login API Error',
+            error
+        })
+    }
+}
+
+
+//fetch user Profile COntroller
+
+export const fetchUserProfileController = async (req, resp) => {
+    try {
+        const user = await userModel.findById(req.user._id)
+        user.password = undefined
+        resp.status(200).send({
+            success : true,
+            message : "User Data fetched successfully",
+            user
+        })
+    } catch (error) {
+        console.log(error)
+        resp.status(500).send({
+            success : false,
+            message : "Error in fetchProfile API",
+            error
+        })
+    }
+}
+
+
+// logOut User Controller
+export const logOutUserController = (req, resp) => {
+    try {
+        resp.status(200).cookie('token', '', {
+            expires : new Date(Date.now()),
+            secure : process.env.NODE_ENV === 'development' ? true : false,
+            httpOnly : process.env.NODE_ENV === 'development' ? true : false,
+        }).send({
+            success : true,
+            message : 'Logged Out Successfully'
+        })
+    } catch (error) {
+        console.log(error)
+        resp.send({
+            success : false,
+            message : 'Error in LogOut API',
+            error
+        })
+    }
+}
+
+
+//update User Proile
+export const userProfileUpdateController = async (req, resp) => {
+    try {
+        const user = await userModel.findById(req.user._id)
+        const {name, email, phone, adress, city, country} = req.body
+        //validation + update
+        if(name) user.name = name
+        if(email) user.name = email
+        if(phone) user.phone = phone
+        if(adress) user.adress = adress
+        if(city) user.city = city
+        if(country) user.country = country
+
+        await user.save();
+        resp.status(200).send({
+            success : true,
+            message : 'UserProfile Updated Successfully'
+        })
+
+    } catch (error) {
+        resp.status(500).send({
+            success : false,
+            message : 'updateProfile API Error',
+            error
+        })
+    }
+}
+
+
+//update Password
+export const updateUserPasswordController = async (req, resp) => {
+    try {
+        const user = await userModel.findById(req.user._id)
+        const {oldPassword, newPassword} = req.body
+        //validation
+        if(!oldPassword || !newPassword){
+            return resp.status(500).send({
+                success : false,
+                message : 'Please provider  both old and new passwords'
+            })
+        }
+        //check old pass
+        const isMatch = await user.comparePassword(oldPassword)
+        if(!isMatch){
+            return resp.status(500).send({
+                success : false,
+                message : 'Old Password is incorrect'
+            })
+        }
+        //update new pass
+        user.password = newPassword
+        await user.save();
+        resp.status(200).send({
+            success : true,
+            message : 'New Password Updated Successfully'
+        })
+    } catch (error) {
+        resp.status(500).send({
+            success : false,
+            message : 'Update Password API Error',
             error
         })
     }
